@@ -1,0 +1,22 @@
+# Build output
+Builds/
+build/
+cmake-build-*/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+
+# IDE
+.vs/
+.vscode/
+*.xcodeproj/
+xcuserdata/
+.idea/
+
+# CI-generated
+.env
+
+# macOS
+.DS_Store

@@ -1,0 +1,3 @@
+# Scaffold from the pamplejuce CMake template instead of Projucer
+
+JUCE plugins have historically been set up via Projucer's GUI-generated project files, and a reader coming from that background might expect this project to follow suit. We chose CMake instead, scaffolded from the pamplejuce template, because it builds and tests from the command line without a GUI step, which suits CI and agent-driven development. pamplejuce additionally bundles a JUCE submodule, Catch2 for unit tests, and `pluginval` wired into GitHub Actions, saving us from building that plumbing ourselves. The trade-off is less flexibility to deviate from pamplejuce's opinions on project layout until we understand it well enough to safely diverge.
