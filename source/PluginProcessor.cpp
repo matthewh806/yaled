@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <cmath>
+
 //==============================================================================
 PluginProcessor::PluginProcessor()
      : AudioProcessor (BusesProperties()
@@ -10,8 +12,12 @@ PluginProcessor::PluginProcessor()
                       #endif
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
                      #endif
-                       )
+                       ),
+       apvts (*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    chunkLengthMsParam = apvts.getRawParameterValue ("chunkLengthMs");
+    tempoSyncParam = apvts.getRawParameterValue ("tempoSync");
+    tempoSyncDivisionParam = apvts.getRawParameterValue ("tempoSyncDivision");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -85,11 +91,73 @@ void PluginProcessor::changeProgramName (int index, const juce::String& newName)
 }
 
 //==============================================================================
+juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParameterLayout()
+{
+    juce::AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "chunkLengthMs", 1 },
+        "Chunk Length",
+        juce::NormalisableRange<float> (10.0f, maxChunkLengthMs, 0.0f, 0.3f),
+        250.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("ms")));
+
+    layout.add (std::make_unique<juce::AudioParameterBool> (
+        juce::ParameterID { "tempoSync", 1 },
+        "Tempo Sync",
+        false));
+
+    layout.add (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { "tempoSyncDivision", 1 },
+        "Tempo Sync Division",
+        juce::StringArray { "1/1", "1/2", "1/4", "1/8", "1/16" },
+        2)); // default: 1/4
+
+    return layout;
+}
+
+double PluginProcessor::getCurrentBpm() const
+{
+    constexpr double defaultBpm = 120.0;
+
+    if (auto* playHead = getPlayHead())
+    {
+        if (auto position = playHead->getPosition())
+        {
+            if (auto bpm = position->getBpm())
+                return *bpm;
+        }
+    }
+
+    return defaultBpm;
+}
+
+int PluginProcessor::currentChunkLengthInSamples() const
+{
+    const auto sampleRate = getSampleRate();
+
+    if (tempoSyncParam->load() >= 0.5f)
+    {
+        const auto division = static_cast<NoteDivision> (static_cast<int> (tempoSyncDivisionParam->load()));
+        return noteDivisionToSamples (getCurrentBpm(), sampleRate, division);
+    }
+
+    const auto ms = chunkLengthMsParam->load();
+    return static_cast<int> (std::round (static_cast<double> (ms) / 1000.0 * sampleRate));
+}
+
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // Use this method as the place to do any pre-playback
-    // initialisation that you need..
-    juce::ignoreUnused (sampleRate, samplesPerBlock);
+    juce::ignoreUnused (samplesPerBlock);
+
+    // A tempo-synced length at a very slow tempo could exceed this; setChunkLength()
+    // clamps to it rather than growing the buffers, which is an acceptable limit.
+    const auto maxChunkLengthSamples = static_cast<int> (std::round (
+        static_cast<double> (maxChunkLengthMs) / 1000.0 * sampleRate));
+    const auto crossfadeLengthSamples = static_cast<int> (std::round (
+        static_cast<double> (crossfadeMs) / 1000.0 * sampleRate));
+
+    reverseEngine.prepare (getTotalNumOutputChannels(), maxChunkLengthSamples, crossfadeLengthSamples);
 }
 
 void PluginProcessor::releaseResources()
@@ -135,13 +203,8 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
-    // The reverse-delay engine (dual-buffer swap + chunk-boundary crossfade,
-    // see docs/adr/0001-dual-buffer-reverse-engine.md) lands here.
-    for (int channel = 0; channel < totalNumInputChannels; ++channel)
-    {
-        auto* channelData = buffer.getWritePointer (channel);
-        juce::ignoreUnused (channelData);
-    }
+    reverseEngine.setChunkLength (currentChunkLengthInSamples());
+    reverseEngine.processBlock (buffer);
 }
 
 //==============================================================================
@@ -158,17 +221,14 @@ juce::AudioProcessorEditor* PluginProcessor::createEditor()
 //==============================================================================
 void PluginProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // You should use this method to store your parameters in the memory block.
-    // You could do that either as raw data, or use the XML or ValueTree classes
-    // as intermediaries to make it easy to save and load complex data.
-    juce::ignoreUnused (destData);
+    if (auto state = apvts.copyState(); auto xml = state.createXml())
+        copyXmlToBinary (*xml, destData);
 }
 
 void PluginProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // You should use this method to restore your parameters from this memory block,
-    // whose contents will have been created by the getStateInformation() call.
-    juce::ignoreUnused (data, sizeInBytes);
+    if (auto xml = getXmlFromBinary (data, sizeInBytes))
+        apvts.replaceState (juce::ValueTree::fromXml (*xml));
 }
 
 //==============================================================================

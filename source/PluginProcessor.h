@@ -2,11 +2,16 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "dsp/DualBufferReverseEngine.h"
+#include "dsp/TempoSync.h"
+
 class PluginProcessor : public juce::AudioProcessor
 {
 public:
     PluginProcessor();
     ~PluginProcessor() override;
+
+    juce::AudioProcessorValueTreeState apvts;
 
     void prepareToPlay (double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -35,5 +40,21 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
 
 private:
+    static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    // The longest Chunk Length the "chunkLengthMs" parameter can request; also used
+    // to size the reverse engine's buffers so tempo-synced lengths never exceed it.
+    static constexpr float maxChunkLengthMs = 2000.0f;
+    static constexpr float crossfadeMs = 15.0f;
+
+    double getCurrentBpm() const;
+    int currentChunkLengthInSamples() const;
+
+    DualBufferReverseEngine reverseEngine;
+
+    std::atomic<float>* chunkLengthMsParam = nullptr;
+    std::atomic<float>* tempoSyncParam = nullptr;
+    std::atomic<float>* tempoSyncDivisionParam = nullptr;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

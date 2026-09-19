@@ -10,7 +10,8 @@
 class DualBufferReverseEngine
 {
 public:
-    void prepare (int numChannels, int chunkLengthSamples, int crossfadeLengthSamples);
+    void prepare (int numChannels, int maxChunkLengthSamples, int crossfadeLengthSamples);
+    void setChunkLength (int chunkLengthSamples);
     void processBlock (juce::AudioBuffer<float>& buffer);
 
 private:
@@ -18,9 +19,11 @@ private:
     juce::AudioBuffer<float>* captureBuffer = &bufferA;
     juce::AudioBuffer<float>* playBuffer = &bufferB;
 
+    int maxChunkLength = 0;
     int chunkLength = 0;
     int crossfadeLength = 0;
     int position = 0;
+    int pendingChunkLength = -1; // -1 means no pending change
 
     float gainAt (int pos) const;
 };

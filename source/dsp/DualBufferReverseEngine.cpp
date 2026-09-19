@@ -2,19 +2,31 @@
 
 #include <utility>
 
-void DualBufferReverseEngine::prepare (int numChannels, int chunkLengthSamples, int crossfadeLengthSamples)
+void DualBufferReverseEngine::prepare (int numChannels, int maxChunkLengthSamples, int crossfadeLengthSamples)
 {
-    chunkLength = chunkLengthSamples;
+    maxChunkLength = maxChunkLengthSamples;
+    chunkLength = maxChunkLengthSamples;
     crossfadeLength = crossfadeLengthSamples;
     position = 0;
+    pendingChunkLength = -1;
 
-    bufferA.setSize (numChannels, chunkLength);
-    bufferB.setSize (numChannels, chunkLength);
+    bufferA.setSize (numChannels, maxChunkLength);
+    bufferB.setSize (numChannels, maxChunkLength);
     bufferA.clear();
     bufferB.clear();
 
     captureBuffer = &bufferA;
     playBuffer = &bufferB;
+}
+
+void DualBufferReverseEngine::setChunkLength (int chunkLengthSamples)
+{
+    const auto clamped = juce::jlimit (1, maxChunkLength, chunkLengthSamples);
+
+    if (position == 0)
+        chunkLength = clamped;
+    else
+        pendingChunkLength = clamped;
 }
 
 float DualBufferReverseEngine::gainAt (int pos) const
@@ -54,6 +66,12 @@ void DualBufferReverseEngine::processBlock (juce::AudioBuffer<float>& buffer)
         {
             std::swap (captureBuffer, playBuffer);
             position = 0;
+
+            if (pendingChunkLength != -1)
+            {
+                chunkLength = pendingChunkLength;
+                pendingChunkLength = -1;
+            }
         }
     }
 }
