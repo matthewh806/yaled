@@ -18,6 +18,7 @@ PluginProcessor::PluginProcessor()
     chunkLengthMsParam = apvts.getRawParameterValue ("chunkLengthMs");
     tempoSyncParam = apvts.getRawParameterValue ("tempoSync");
     tempoSyncDivisionParam = apvts.getRawParameterValue ("tempoSyncDivision");
+    mixParam = apvts.getRawParameterValue ("mix");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -113,6 +114,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
         juce::StringArray { "1/1", "1/2", "1/4", "1/8", "1/16" },
         2)); // default: 1/4
 
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "mix", 1 },
+        "Mix",
+        juce::NormalisableRange<float> (0.0f, 100.0f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("%")));
+
     return layout;
 }
 
@@ -148,8 +156,6 @@ int PluginProcessor::currentChunkLengthInSamples() const
 
 void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    juce::ignoreUnused (samplesPerBlock);
-
     // A tempo-synced length at a very slow tempo could exceed this; setChunkLength()
     // clamps to it rather than growing the buffers, which is an acceptable limit.
     const auto maxChunkLengthSamples = static_cast<int> (std::round (
@@ -158,6 +164,7 @@ void PluginProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
         static_cast<double> (crossfadeMs) / 1000.0 * sampleRate));
 
     reverseEngine.prepare (getTotalNumOutputChannels(), maxChunkLengthSamples, crossfadeLengthSamples);
+    dryBuffer.setSize (getTotalNumOutputChannels(), samplesPerBlock);
 }
 
 void PluginProcessor::releaseResources()
@@ -203,8 +210,23 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear (i, 0, buffer.getNumSamples());
 
+    const auto numSamples = buffer.getNumSamples();
+    for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+        dryBuffer.copyFrom (channel, 0, buffer, channel, 0, numSamples);
+
     reverseEngine.setChunkLength (currentChunkLengthInSamples());
     reverseEngine.processBlock (buffer);
+
+    const auto wetAmount = mixParam->load() / 100.0f;
+    const auto dryAmount = 1.0f - wetAmount;
+    for (int channel = 0; channel < totalNumOutputChannels; ++channel)
+    {
+        auto* wet = buffer.getWritePointer (channel);
+        auto* dry = dryBuffer.getReadPointer (channel);
+
+        for (int n = 0; n < numSamples; ++n)
+            wet[n] = dry[n] * dryAmount + wet[n] * wetAmount;
+    }
 }
 
 //==============================================================================

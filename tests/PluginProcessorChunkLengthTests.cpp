@@ -21,6 +21,11 @@ TEST_CASE ("PluginProcessor reverses audio according to the chunkLengthMs parame
     REQUIRE (chunkLengthMsParam != nullptr);
     *chunkLengthMsParam = 100.0f;
 
+    // Isolate chunk-length behavior from the Mix parameter (tested separately).
+    auto* mixParam = dynamic_cast<juce::AudioParameterFloat*> (plugin.apvts.getParameter ("mix"));
+    REQUIRE (mixParam != nullptr);
+    *mixParam = 100.0f;
+
     juce::MidiBuffer midi;
 
     juce::AudioBuffer<float> firstChunk (2, chunkLength);
@@ -60,6 +65,11 @@ TEST_CASE ("PluginProcessor derives Chunk Length from host tempo when Tempo Sync
     auto* divisionParam = dynamic_cast<juce::AudioParameterChoice*> (plugin.apvts.getParameter ("tempoSyncDivision"));
     REQUIRE (divisionParam != nullptr);
     *divisionParam = 2; // "1/4"
+
+    // Isolate chunk-length behavior from the Mix parameter (tested separately).
+    auto* mixParam = dynamic_cast<juce::AudioParameterFloat*> (plugin.apvts.getParameter ("mix"));
+    REQUIRE (mixParam != nullptr);
+    *mixParam = 100.0f;
 
     juce::MidiBuffer midi;
 

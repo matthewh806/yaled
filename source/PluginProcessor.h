@@ -51,10 +51,12 @@ private:
     int currentChunkLengthInSamples() const;
 
     DualBufferReverseEngine reverseEngine;
+    juce::AudioBuffer<float> dryBuffer;
 
     std::atomic<float>* chunkLengthMsParam = nullptr;
     std::atomic<float>* tempoSyncParam = nullptr;
     std::atomic<float>* tempoSyncDivisionParam = nullptr;
+    std::atomic<float>* mixParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };
