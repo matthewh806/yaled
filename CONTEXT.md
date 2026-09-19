@@ -1,6 +1,6 @@
 # Yaled (Reverse Delay Plugin)
 
-A JUCE-based audio effect plugin that plays incoming audio back in reverse, in continuous, overlapping chunks, rather than reversing a fixed recording.
+A JUCE-based audio effect plugin that plays incoming audio back in reverse, in continuous, overlapping chunks, rather than reversing a fixed recording. Personal, open-source project (not commercial), started after reading a [KVR Audio forum thread](https://www.kvraudio.com/forum/viewtopic.php?t=599376) discussing reverse-delay DSP techniques.
 
 ## Language
 
