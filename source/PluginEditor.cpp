@@ -16,6 +16,7 @@ namespace
     constexpr int knobY = 116;
     constexpr int knobHeight = 116; // the knob itself, plus its value readout underneath
     constexpr int readoutHeight = 24;
+    constexpr float dimmedAlpha = 0.35f; // a control that is not in use right now
 
     constexpr int bottomCaptionY = 256;
     constexpr int bottomControlY = 272;
@@ -83,7 +84,7 @@ void PluginEditor::configureKnob (juce::Slider& slider, const juce::String& para
 {
     slider.setComponentID (parameterId);
     slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, 120, readoutHeight);
+    slider.setTextBoxStyle (juce::Slider::TextBoxBelow, false, columnWidth - 2 * retro::pixel, readoutHeight);
     addAndMakeVisible (slider);
 }
 
@@ -97,8 +98,8 @@ void PluginEditor::formatKnobReadout (juce::Slider& slider, const juce::String& 
 void PluginEditor::updateTempoSyncDimming()
 {
     const bool synced = tempoSyncButton.getToggleState();
-    chunkLengthSlider.setAlpha (synced ? 0.35f : 1.0f);
-    divisionBox.setAlpha (synced ? 1.0f : 0.35f);
+    chunkLengthSlider.setAlpha (synced ? dimmedAlpha : 1.0f);
+    divisionBox.setAlpha (synced ? 1.0f : dimmedAlpha);
 }
 
 //==============================================================================
@@ -111,13 +112,13 @@ void PluginEditor::paint (juce::Graphics& g)
 
     // The name, with a drop shadow.
     const juce::Rectangle<int> title (margin + p, titleY, 320, 32);
-    g.setFont (lookAndFeel.pixelFont (32.0f));
+    g.setFont (lookAndFeel.pixelFont (retro::titleFontHeight));
     g.setColour (retro::border);
     g.drawText ("YALED", title.translated (p, p), juce::Justification::topLeft, false);
     g.setColour (retro::accent);
     g.drawText ("YALED", title, juce::Justification::topLeft, false);
 
-    g.setFont (lookAndFeel.pixelFont (8.0f));
+    g.setFont (lookAndFeel.pixelFont (retro::captionFontHeight));
     g.setColour (retro::cyan);
     g.drawText ("REVERSE DELAY", margin + p, titleY + 44, 200, 8, juce::Justification::topLeft, false);
 

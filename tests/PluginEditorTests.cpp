@@ -1,4 +1,5 @@
 #include <PluginProcessor.h>
+#include <ui/RetroLookAndFeel.h>
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -104,4 +105,57 @@ TEST_CASE ("PluginEditor shows the parameter values it is opened with", "[Plugin
 
     CHECK (mix->getValue() == Catch::Approx (20.0));
     CHECK (sync->getToggleState());
+}
+
+TEST_CASE ("PluginEditor dims the Chunk Length knob while Tempo Sync is on and the Division box while it is off", "[PluginEditor]")
+{
+    PluginProcessor plugin;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (plugin.createEditor());
+
+    auto* chunkLength = findControl<juce::Slider> (*editor, "chunkLengthMs");
+    auto* division = findControl<juce::ComboBox> (*editor, "tempoSyncDivision");
+    REQUIRE (chunkLength != nullptr);
+    REQUIRE (division != nullptr);
+
+    // Tempo Sync is off by default, so the free knob is the one in use.
+    CHECK (chunkLength->getAlpha() == 1.0f);
+    CHECK (division->getAlpha() < 1.0f);
+
+    // Changed by the host (automation, a restored session), not by clicking the button.
+    *dynamic_cast<juce::AudioParameterBool*> (plugin.apvts.getParameter ("tempoSync")) = true;
+
+    CHECK (chunkLength->getAlpha() < 1.0f);
+    CHECK (division->getAlpha() == 1.0f);
+}
+
+TEST_CASE ("PluginEditor follows parameter changes the host makes while it is open", "[PluginEditor]")
+{
+    PluginProcessor plugin;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (plugin.createEditor());
+
+    auto* feedback = findControl<juce::Slider> (*editor, "feedback");
+    REQUIRE (feedback != nullptr);
+
+    *dynamic_cast<juce::AudioParameterFloat*> (plugin.apvts.getParameter ("feedback")) = 65.0f;
+
+    CHECK (feedback->getValue() == Catch::Approx (65.0));
+}
+
+TEST_CASE ("PluginEditor knob readouts are wide enough for the longest value", "[PluginEditor]")
+{
+    PluginProcessor plugin;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (plugin.createEditor());
+
+    auto* chunkLength = findControl<juce::Slider> (*editor, "chunkLengthMs");
+    auto* lookAndFeel = dynamic_cast<RetroLookAndFeel*> (&editor->getLookAndFeel());
+    REQUIRE (chunkLength != nullptr);
+    REQUIRE (lookAndFeel != nullptr);
+
+    // "2000 MS" is the widest readout. A label keeps a 5px border on each side of its text.
+    constexpr float labelBorders = 10.0f;
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText (lookAndFeel->pixelFont (retro::bodyFontHeight), "2000 MS", 0.0f, 0.0f);
+    const auto textWidth = glyphs.getBoundingBox (0, -1, false).getWidth();
+
+    CHECK (textWidth + labelBorders <= static_cast<float> (chunkLength->getTextBoxWidth()));
 }

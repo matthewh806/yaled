@@ -15,6 +15,11 @@ namespace retro
     inline const juce::Colour text         { 0xfff4f4f4 };
     inline const juce::Colour dimText      { 0xff566c86 };
 
+    // Press Start 2P is designed on an 8px grid: keep text heights to multiples of 8 for crisp glyphs.
+    constexpr float captionFontHeight = 8.0f;
+    constexpr float bodyFontHeight = 16.0f;
+    constexpr float titleFontHeight = 32.0f;
+
     // One "art pixel". Everything is drawn as blocks of this size so the UI reads as low-res.
     constexpr int pixel = 4;
 }
@@ -26,7 +31,6 @@ class RetroLookAndFeel : public juce::LookAndFeel_V4
 public:
     RetroLookAndFeel();
 
-    // Press Start 2P is designed on an 8px grid: use multiples of 8 for crisp text.
     juce::Font pixelFont (float height) const;
 
     static void drawPixelBox (juce::Graphics&, juce::Rectangle<int> bounds, juce::Colour fill, juce::Colour border);

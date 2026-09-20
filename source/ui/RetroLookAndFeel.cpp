@@ -130,7 +130,7 @@ void RetroLookAndFeel::drawToggleButton (juce::Graphics& g, juce::ToggleButton& 
     g.fillRect (led.reduced (p / 2 + 1));
 
     g.setColour (isOn ? retro::text : retro::dimText);
-    g.setFont (pixelFont (16.0f));
+    g.setFont (pixelFont (retro::bodyFontHeight));
     g.drawText (button.getButtonText(), bounds.withTrimmedLeft (9 * p), juce::Justification::centredLeft, false);
 }
 
@@ -161,12 +161,12 @@ void RetroLookAndFeel::positionComboBoxText (juce::ComboBox& box, juce::Label& l
 
 juce::Font RetroLookAndFeel::getComboBoxFont (juce::ComboBox&)
 {
-    return pixelFont (16.0f);
+    return pixelFont (retro::bodyFontHeight);
 }
 
 juce::Font RetroLookAndFeel::getPopupMenuFont()
 {
-    return pixelFont (16.0f);
+    return pixelFont (retro::bodyFontHeight);
 }
 
 juce::Font RetroLookAndFeel::getLabelFont (juce::Label& label)
@@ -177,7 +177,7 @@ juce::Font RetroLookAndFeel::getLabelFont (juce::Label& label)
 juce::Label* RetroLookAndFeel::createSliderTextBox (juce::Slider& slider)
 {
     auto* label = LookAndFeel_V4::createSliderTextBox (slider);
-    label->setFont (pixelFont (16.0f));
+    label->setFont (pixelFont (retro::bodyFontHeight));
     label->setJustificationType (juce::Justification::centred);
     return label;
 }

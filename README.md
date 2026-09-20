@@ -2,6 +2,10 @@
 
 A reverse-delay audio plugin built with [JUCE](https://juce.com/). See [`CONTEXT.md`](./CONTEXT.md) for the domain vocabulary and [`docs/adr/`](./docs/adr/) for the reasoning behind the DSP and build-tooling decisions.
 
+![Yaled's retro 8-bit editor: the Chunk Length, Mix and Feedback knobs sweep, then Tempo Sync switches on and steps through the divisions](./docs/images/yaled-ui.gif)
+
+_The editor: a knob for Chunk Length, Mix and Feedback, a Tempo Sync toggle and a Division selector. With Tempo Sync on, the Chunk Length knob dims and the Division selector takes over. This animation is frames rendered from the real editor code with the parameters driven programmatically, not a screen recording of a host._
+
 ## Building
 
 ```sh
