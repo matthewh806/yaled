@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PROTOTYPE: Chunk Boundary Crossfade listening test</title>
+<style>
+  :root { --bg:#14161a; --panel:#1c1f25; --ink:#e8e9ec; --muted:#9aa0aa; --line:#2c313a; --accent:#f0a030; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 28px 0 10px; font-weight: 600; }
+  .banner { border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:6px 10px; display:inline-block; font-size:12px; letter-spacing:.06em; margin-bottom:12px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; }
+  .question { border-left:3px solid var(--accent); }
+  p { margin: 6px 0; }
+  .muted { color: var(--muted); }
+  .row { display:grid; grid-template-columns: 170px 1fr 80px; gap:12px; align-items:center; margin:8px 0; }
+  .row label { color:var(--muted); }
+  .row output { text-align:right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width:100%; accent-color: var(--accent); }
+  select, button, input[type=file] { background:#252932; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:7px 12px; font:inherit; }
+  button { cursor:pointer; }
+  button:hover { border-color: var(--muted); }
+  .modes { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; }
+  .modes button { padding:14px 10px; text-align:left; }
+  .modes button b { display:block; }
+  .modes button span { color:var(--muted); font-size:13px; }
+  .modes button.on { border-color:var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .transport { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+  .transport button.primary { background:var(--accent); color:#1a1200; border-color:var(--accent); font-weight:600; }
+  canvas { width:100%; height:auto; display:block; background:#101216; border-radius:6px; border:1px solid var(--line); }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .tabs button.on { border-color:var(--accent); color:var(--accent); }
+  .state { display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; }
+  .state div { background:#101216; border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .state small { display:block; color:var(--muted); }
+  .warn { color:var(--accent); }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr 70px; } .row label { grid-column: 1 / -1; } .modes { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="banner">PROTOTYPE &mdash; throwaway, not part of the plugin</div>
+  <h1>Chunk Boundary Crossfade listening test</h1>
+
+  <div class="panel question">
+    <p><b>The question.</b> Yaled plays each <i>Reverse Chunk</i> backwards, one after another. At every <i>chunk boundary</i>
+    the audio jumps to a different place in the original, which would click. Today the code hides the click by fading each chunk to
+    silence at both ends, so the sound <b>dips</b> at every boundary (ADR-0001 calls this a crossfade, but nothing overlaps).
+    The alternative is a <b>true overlap crossfade</b>: the end of one reversed chunk overlaps the start of the next, so the level stays even.</p>
+    <p class="muted">Does the dip sound audibly worse than the overlap? Does the crossfade length or curve shape matter? Do very short chunks misbehave?
+    Use headphones or decent speakers, click the three buttons while it plays, and try the scenarios below.</p>
+  </div>
+
+  <h2>1. Signal</h2>
+  <div class="panel">
+    <div class="row"><label for="signal">Input audio</label>
+      <select id="signal">
+        <option value="pad">Sustained chord (dips are easiest to hear)</option>
+        <option value="pluck">Plucked arpeggio (musical)</option>
+        <option value="file">My own audio file&hellip;</option>
+      </select><span></span></div>
+    <div class="row" id="fileRow" hidden><label for="file">Audio file</label><input type="file" id="file" accept="audio/*"><span></span></div>
+  </div>
+
+  <h2>2. Settings</h2>
+  <div class="panel">
+    <div class="row"><label for="chunkMs">Chunk Length</label><input type="range" id="chunkMs" min="10" max="2000" step="1" value="250"><output id="chunkMsOut"></output></div>
+    <div class="row"><label for="xfadeMs">Crossfade length</label><input type="range" id="xfadeMs" min="0" max="100" step="1" value="15"><output id="xfadeMsOut"></output></div>
+    <div class="row"><label for="curve">Overlap curve</label>
+      <select id="curve"><option value="equal-power">Equal power (constant loudness)</option><option value="linear">Linear</option></select><span></span></div>
+    <div class="row"><label for="mix">Mix (dry / wet)</label><input type="range" id="mix" min="0" max="100" step="1" value="100"><output id="mixOut"></output></div>
+  </div>
+
+  <h2>3. Listen</h2>
+  <div class="panel">
+    <div class="modes" id="modes">
+      <button data-mode="none"><b>A &middot; Hard swap</b><span>No crossfade. Expect clicks. Reference only.</span></button>
+      <button data-mode="dip"><b>B &middot; Current: dip</b><span>Fade to silence at each end of every chunk.</span></button>
+      <button data-mode="overlap"><b>C &middot; Overlap crossfade</b><span>Chunks overlap; level stays even.</span></button>
+    </div>
+    <div class="transport">
+      <button class="primary" id="play">Play</button>
+      <span class="muted" id="status">Loops. Switch A / B / C while playing &mdash; position is kept.</span>
+    </div>
+  </div>
+
+  <h2>What is happening right now</h2>
+  <div class="panel">
+    <div class="state" id="state"></div>
+    <p class="warn" id="warning" style="margin-top:10px"></p>
+  </div>
+
+  <h2>The seam, zoomed in</h2>
+  <div class="panel">
+    <canvas id="seam" width="1800" height="600"></canvas>
+    <p class="muted">Each row is the output around one chunk boundary (vertical line). Same vertical scale in all three rows. For C, the overlap
+    runs to the right of the line, as the previous chunk's tail finishes while the next one fades in.</p>
+  </div>
+
+  <h2>Guided scenarios</h2>
+  <div class="panel">
+    <div class="tabs" id="tabs"></div>
+    <p id="scenarioDesc"></p>
+    <button id="applyScenario">Set up this scenario</button>
+  </div>
+</main>
+
+<!-- ===== Pure module: no DOM, no Web Audio. This is the part worth lifting into the real engine. ===== -->
+<script id="engine">
+const Engine = (() => {
+  // Exactly the envelope used by DualBufferReverseEngine::gainAt today, including its quirks
+  // for chunks shorter than 2x the crossfade.
+  function dipGain(p, L, X) {
+    if (X <= 0) return 1;
+    if (p < X) return p / X;
+    if (p >= L - X) return (L - 1 - p) / X;
+    return 1;
+  }
+  // Complementary gains: in(t)^k + out(t)^k stays constant (k=1 linear, k=2 equal power).
+  function overlapGains(t, curve) {
+    return curve === 'equal-power'
+      ? { inG: Math.sin(t * Math.PI / 2), outG: Math.cos(t * Math.PI / 2) }
+      : { inG: t, outG: 1 - t };
+  }
+  // Output during chunk period j (j >= 1) is chunk j-1 played in reverse. Period 0 is silence.
+  function renderChannel(input, sampleRate, o) {
+    const n = input.length;
+    const L = Math.max(1, Math.round(o.chunkMs / 1000 * sampleRate));
+    const Xraw = Math.max(0, Math.round(o.crossfadeMs / 1000 * sampleRate));
+    const out = new Float32Array(n);
+    if (o.mode === 'overlap') {
+      const X = Math.min(Xraw, L);                 // overlap can't exceed one chunk
+      for (let j = 1; j * L < n; j++) {
+        const start = j * L;
+        for (let p = 0; p < L + X; p++) {
+          const at = start + p;
+          if (at >= n) break;
+          const idx = start - 1 - p;               // past p = L this reads audio before the chunk (its extended tail)
+          const s = idx >= 0 ? input[idx] : 0;
+          let g = 1;
+          if (X > 0) {
+            if (p < X) g = overlapGains((p + 0.5) / X, o.curve).inG;
+            else if (p >= L) g = overlapGains((p - L + 0.5) / X, o.curve).outG;
+          }
+          out[at] += s * g;
+        }
+      }
+    } else {
+      const X = o.mode === 'none' ? 0 : Xraw;
+      for (let j = 1; j * L < n; j++) {
+        const start = j * L;
+        for (let p = 0; p < L; p++) {
+          const at = start + p;
+          if (at >= n) break;
+          out[at] = input[start - 1 - p] * dipGain(p, L, X);
+        }
+      }
+    }
+    return out;
+  }
+  function render(channels, sampleRate, o) {
+    const m = o.mix / 100;
+    return channels.map(ch => {
+      const wet = renderChannel(ch, sampleRate, o);
+      const out = new Float32Array(ch.length);
+      for (let i = 0; i < ch.length; i++) out[i] = ch[i] * (1 - m) + wet[i] * m;
+      return out;
+    });
+  }
+  return { render, dipGain, overlapGains };
+})();
+</script>
+
+<!-- ===== Throwaway page shell ===== -->
+<script>
+const $ = id => document.getElementById(id);
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const SR = ctx.sampleRate;
+const DURATION_S = 8;
+
+const state = { signal: 'pad', chunkMs: 250, xfadeMs: 15, curve: 'equal-power', mix: 100, mode: 'dip' };
+let input = null;            // array of Float32Array channels
+let rendered = {};           // mode -> Float32Array[]
+let audioBuffers = {};       // mode -> AudioBuffer
+let playing = false, srcNode = null, startedAt = 0, offset = 0, duration = DURATION_S;
+
+// ---- test signals -------------------------------------------------------------------
+function makePad() {
+  const n = SR * DURATION_S, d = new Float32Array(n);
+  const freqs = [110, 164.81, 220, 277.18, 329.63];
+  for (let i = 0; i < n; i++) {
+    const t = i / SR; let s = 0;
+    freqs.forEach((f, k) => { s += Math.sin(2 * Math.PI * f * t + k) * (0.6 + 0.4 * Math.sin(2 * Math.PI * (0.2 + k * 0.03) * t)); });
+    d[i] = s * 0.12;
+  }
+  return [d];
+}
+function makePluck() {
+  const n = SR * DURATION_S, d = new Float32Array(n);
+  const notes = [220, 261.63, 329.63, 392, 329.63, 261.63, 196, 246.94];
+  const step = Math.round(SR * 0.25);
+  for (let k = 0; k * step < n; k++) {
+    const f = notes[k % notes.length];
+    for (let i = 0; i < step * 3 && k * step + i < n; i++) {
+      const t = i / SR, env = Math.exp(-t * 5);
+      d[k * step + i] += env * (Math.sin(2 * Math.PI * f * t) + 0.5 * Math.sin(4 * Math.PI * f * t) + 0.25 * Math.sin(6 * Math.PI * f * t)) * 0.25;
+    }
+  }
+  return [d];
+}
+function loadSignal() {
+  if (state.signal === 'pad') input = makePad();
+  else if (state.signal === 'pluck') input = makePluck();
+  duration = input[0].length / SR;
+}
+
+// ---- render + playback ---------------------------------------------------------------
+function rerender() {
+  if (!input) return;
+  const pos = currentPos();
+  const opts = { chunkMs: state.chunkMs, crossfadeMs: state.xfadeMs, curve: state.curve, mix: state.mix };
+  let peak = 0;
+  for (const mode of ['none', 'dip', 'overlap']) {
+    rendered[mode] = Engine.render(input, SR, { ...opts, mode });
+    rendered[mode].forEach(ch => { for (let i = 0; i < ch.length; i++) peak = Math.max(peak, Math.abs(ch[i])); });
+  }
+  const scale = peak > 0.98 ? 0.98 / peak : 1;     // one shared scale so loudness comparisons stay fair
+  for (const mode of ['none', 'dip', 'overlap']) {
+    const chs = rendered[mode];
+    const buf = ctx.createBuffer(chs.length, chs[0].length, SR);
+    chs.forEach((ch, c) => { const scaled = new Float32Array(ch.length); for (let i = 0; i < ch.length; i++) scaled[i] = ch[i] * scale; buf.copyToChannel(scaled, c); });
+    audioBuffers[mode] = buf;
+  }
+  if (playing) startPlayback(pos);
+  renderState(); drawSeam();
+}
+function currentPos() { return playing ? (offset + ctx.currentTime - startedAt) % duration : offset; }
+function startPlayback(at) {
+  if (srcNode) { srcNode.onended = null; try { srcNode.stop(); } catch (e) {} }
+  srcNode = ctx.createBufferSource();
+  srcNode.buffer = audioBuffers[state.mode];
+  srcNode.loop = true;
+  srcNode.connect(ctx.destination);
+  srcNode.start(0, at % duration);
+  startedAt = ctx.currentTime; offset = at % duration; playing = true;
+  $('play').textContent = 'Stop';
+}
+function stopPlayback() {
+  offset = currentPos();
+  if (srcNode) { try { srcNode.stop(); } catch (e) {} srcNode = null; }
+  playing = false; $('play').textContent = 'Play';
+}
+
+// ---- readouts ------------------------------------------------------------------------
+function renderState() {
+  const L = state.chunkMs, X = state.xfadeMs;
+  const dipPct = Math.min(100, Math.round(2 * X / L * 100));
+  const items = [
+    ['Chunks per second', (1000 / L).toFixed(1)],
+    ['Current code: time inside a fade', dipPct + '% of every chunk'],
+    ['Overlap crossfade', Math.min(X, L) + ' ms, chunks overlap by this much'],
+    ['Playing', state.mode === 'none' ? 'A · Hard swap' : state.mode === 'dip' ? 'B · Current dip' : 'C · Overlap'],
+  ];
+  $('state').innerHTML = items.map(([k, v]) => `<div><small>${k}</small>${v}</div>`).join('');
+  let w = '';
+  if (L <= X) w = 'Chunk is no longer than the crossfade: in B the chunk ends mid-ramp, so it clicks at the boundary.';
+  else if (L < 2 * X) w = 'Chunk is shorter than 2x the crossfade: in B the gain jumps mid-chunk (fade-in and fade-out collide).';
+  $('warning').textContent = w;
+}
+function drawSeam() {
+  const cv = $('seam'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  if (!rendered.dip) return;
+  const L = Math.max(1, Math.round(state.chunkMs / 1000 * SR));
+  const X = Math.round(state.xfadeMs / 1000 * SR);
+  const m = Math.max(1, Math.min(4, Math.floor(input[0].length / L) - 2));
+  const pre = Math.round(0.05 * SR), post = Math.round(0.05 * SR) + Math.min(X, L);
+  const from = Math.max(0, m * L - pre), to = Math.min(input[0].length, m * L + post);
+  const modes = [['none', 'A · Hard swap'], ['dip', 'B · Current dip'], ['overlap', 'C · Overlap']];
+  let peak = 1e-6;
+  modes.forEach(([k]) => { const ch = rendered[k][0]; for (let i = from; i < to; i++) peak = Math.max(peak, Math.abs(ch[i])); });
+  const rowH = H / 3;
+  modes.forEach(([k, label], r) => {
+    const ch = rendered[k][0], top = r * rowH, mid = top + rowH / 2;
+    g.strokeStyle = '#2c313a'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, mid); g.lineTo(W, mid); g.stroke();
+    g.fillStyle = k === state.mode ? '#f0a030' : '#9aa0aa'; g.font = '26px sans-serif'; g.fillText(label, 12, top + 30);
+    g.strokeStyle = k === state.mode ? '#f0a030' : '#c9ccd2'; g.lineWidth = 2;
+    for (let x = 0; x < W; x++) {
+      const a = from + Math.floor(x / W * (to - from)), b = from + Math.max(a - from + 1, Math.floor((x + 1) / W * (to - from)));
+      let lo = 0, hi = 0;
+      for (let i = a; i < b && i < to; i++) { lo = Math.min(lo, ch[i]); hi = Math.max(hi, ch[i]); }
+      g.beginPath(); g.moveTo(x + .5, mid - hi / peak * (rowH / 2 - 8)); g.lineTo(x + .5, mid - lo / peak * (rowH / 2 - 8)); g.stroke();
+    }
+    const bx = (m * L - from) / (to - from) * W;
+    g.strokeStyle = '#f0a03088'; g.setLineDash([8, 8]); g.beginPath(); g.moveTo(bx, top); g.lineTo(bx, top + rowH); g.stroke(); g.setLineDash([]);
+  });
+}
+
+// ---- wiring ----------------------------------------------------------------------------
+let timer = null;
+function schedule() { clearTimeout(timer); timer = setTimeout(rerender, 120); }
+function syncOutputs() { $('chunkMsOut').textContent = state.chunkMs + ' ms'; $('xfadeMsOut').textContent = state.xfadeMs + ' ms'; $('mixOut').textContent = state.mix + '%'; }
+function syncControls() { $('chunkMs').value = state.chunkMs; $('xfadeMs').value = state.xfadeMs; $('curve').value = state.curve; $('mix').value = state.mix; $('signal').value = state.signal; syncOutputs(); }
+function bindRange(id, key) { $(id).addEventListener('input', e => { state[key] = +e.target.value; syncOutputs(); schedule(); }); }
+bindRange('chunkMs', 'chunkMs'); bindRange('xfadeMs', 'xfadeMs'); bindRange('mix', 'mix');
+$('curve').addEventListener('change', e => { state.curve = e.target.value; rerender(); });
+$('signal').addEventListener('change', e => {
+  state.signal = e.target.value; $('fileRow').hidden = state.signal !== 'file';
+  if (state.signal !== 'file') { loadSignal(); rerender(); }
+});
+$('file').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('status').textContent = 'Decoding…';
+  try {
+    const buf = await ctx.decodeAudioData(await f.arrayBuffer());
+    const n = Math.min(buf.length, SR * 30);
+    input = []; for (let c = 0; c < Math.min(2, buf.numberOfChannels); c++) input.push(buf.getChannelData(c).slice(0, n));
+    duration = n / SR; offset = 0; rerender();
+    $('status').textContent = 'Loaded (first 30 s). Loops. Switch A / B / C while playing.';
+  } catch (err) { $('status').textContent = 'Could not decode that file.'; }
+});
+function setMode(m) {
+  const pos = currentPos(); state.mode = m;
+  document.querySelectorAll('#modes button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  if (playing) startPlayback(pos);
+  renderState(); drawSeam();
+}
+document.querySelectorAll('#modes button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+$('play').addEventListener('click', async () => {
+  await ctx.resume();
+  if (playing) stopPlayback(); else startPlayback(offset);
+});
+
+// ---- guided scenarios ---------------------------------------------------------------------
+const scenarios = [
+  { name: 'Defaults on a pad', set: { signal: 'pad', chunkMs: 250, xfadeMs: 15, curve: 'equal-power', mix: 100 },
+    desc: 'The plugin defaults (250 ms chunks, 15 ms crossfade) on a steady chord. Play B, then C, then A. In B, listen for a pulse four times a second where the sound dips. In C, the chord should stay even. In A, listen for ticks at the boundaries.' },
+  { name: 'Defaults on plucks', set: { signal: 'pluck', chunkMs: 250, xfadeMs: 15, curve: 'equal-power', mix: 100 },
+    desc: 'The same settings on music with attacks. Dips can hide inside decaying notes, so this is the fair test of whether B is really audible in normal use.' },
+  { name: 'Very short chunks', set: { signal: 'pad', chunkMs: 20, xfadeMs: 15, curve: 'equal-power', mix: 100 },
+    desc: '20 ms chunks are shorter than 2x the crossfade. This reproduces the envelope problem in the code today: in B the gain jumps mid-chunk. Compare B with C. The readout above will warn.' },
+  { name: 'Long crossfade', set: { signal: 'pad', chunkMs: 250, xfadeMs: 80, curve: 'equal-power', mix: 100 },
+    desc: 'An 80 ms crossfade. B now gates about a third of every chunk. C should stay smooth, but may blur the reversed audio at the seam. Is the trade-off worth it?' },
+  { name: 'Curve shape', set: { signal: 'pad', chunkMs: 250, xfadeMs: 40, curve: 'linear', mix: 100 },
+    desc: 'Play C with Linear, then switch the curve to Equal power. Unrelated audio crossfaded linearly tends to dip in loudness in the middle of the overlap. Can you hear a difference?' },
+  { name: 'With the default Mix', set: { signal: 'pluck', chunkMs: 250, xfadeMs: 15, curve: 'equal-power', mix: 50 },
+    desc: 'The real plugin defaults to a 50% dry/wet Mix. Does the dip in B still stand out when the dry signal is filling in underneath it?' },
+];
+let active = 0;
+function showScenario(i) {
+  active = i;
+  $('tabs').innerHTML = scenarios.map((s, k) => `<button data-i="${k}" class="${k === i ? 'on' : ''}">${k + 1}. ${s.name}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => showScenario(+b.dataset.i)));
+  $('scenarioDesc').textContent = scenarios[i].desc;
+}
+$('applyScenario').addEventListener('click', () => {
+  const s = scenarios[active].set, sigChanged = s.signal !== state.signal;
+  Object.assign(state, { chunkMs: s.chunkMs, xfadeMs: s.xfadeMs, curve: s.curve, mix: s.mix, signal: s.signal });
+  $('fileRow').hidden = true; syncControls();
+  if (sigChanged) loadSignal();
+  rerender();
+});
+
+// ---- boot ----------------------------------------------------------------------------------
+loadSignal(); syncControls(); showScenario(0); setMode('dip'); rerender();
+</script>
+</body>
+</html>
