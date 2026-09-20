@@ -10,8 +10,13 @@
 class DualBufferReverseEngine
 {
 public:
+    // The highest gain the Feedback Path can reach. Kept just below unity: at exactly 1.0
+    // repeats never decay and continued input keeps building the level up.
+    static constexpr float maxFeedbackGain = 0.98f;
+
     void prepare (int numChannels, int maxChunkLengthSamples, int crossfadeLengthSamples);
     void setChunkLength (int chunkLengthSamples);
+    void setFeedback (float amount);
     void processBlock (juce::AudioBuffer<float>& buffer);
 
 private:
@@ -24,6 +29,7 @@ private:
     int crossfadeLength = 0;
     int position = 0;
     int pendingChunkLength = -1; // -1 means no pending change
+    float feedback = 0.0f;
 
     float gainAt (int pos) const;
 };

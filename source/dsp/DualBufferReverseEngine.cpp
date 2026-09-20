@@ -29,6 +29,11 @@ void DualBufferReverseEngine::setChunkLength (int chunkLengthSamples)
         pendingChunkLength = clamped;
 }
 
+void DualBufferReverseEngine::setFeedback (float amount)
+{
+    feedback = juce::jlimit (0.0f, maxFeedbackGain, amount);
+}
+
 float DualBufferReverseEngine::gainAt (int pos) const
 {
     if (crossfadeLength <= 0)
@@ -55,10 +60,13 @@ void DualBufferReverseEngine::processBlock (juce::AudioBuffer<float>& buffer)
         for (int channel = 0; channel < numChannels; ++channel)
         {
             const auto inputSample = buffer.getSample (channel, n);
-            captureBuffer->setSample (channel, position, inputSample);
+            const auto reversedSample = playBuffer->getSample (channel, chunkLength - 1 - position);
 
-            const auto outputSample = playBuffer->getSample (channel, chunkLength - 1 - position) * gain;
-            buffer.setSample (channel, n, outputSample);
+            // Feedback Path: the reversed sample goes back into the capturing buffer before
+            // the fade gain is applied, so the fade only shapes what is heard.
+            captureBuffer->setSample (channel, position, inputSample + reversedSample * feedback);
+
+            buffer.setSample (channel, n, reversedSample * gain);
         }
 
         ++position;

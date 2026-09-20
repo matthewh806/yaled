@@ -24,7 +24,7 @@ _Avoid_: delay time (implies the input-to-echo gap of a conventional forward del
 The toggle that switches Chunk Length from a free millisecond value to a host tempo note division.
 
 **Feedback Path**:
-The route by which a Reverse Chunk's output is mixed back into the buffer currently capturing the next chunk, so successive chunks are built partly from prior reversed output rather than fresh input alone. This produces the cascading, regenerating reverse trails associated with the effect.
+The route by which a Reverse Chunk's output is mixed back into the buffer currently capturing the next chunk, so successive chunks are built partly from prior reversed output rather than fresh input alone. This produces the cascading, regenerating trails associated with the effect. Because the fed-back audio is already reversed, each successive echo plays in the opposite direction to the one before it (reversed, then forward, then reversed again), each quieter by the feedback gain. The signal is tapped before the Chunk Boundary Crossfade, so the fade shapes only what is heard and does not compound down the trail, and the gain is capped just below unity.
 _Avoid_: feedback loop (implies unstable/unintended feedback, whereas this is a deliberate, level-capped signal path)
 
 **Linked Stereo Processing**:
