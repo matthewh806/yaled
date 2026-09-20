@@ -55,8 +55,9 @@ TEST_CASE ("PluginProcessor feeds the reversed output back according to the feed
 
     const auto forwardEcho = thirdChunkAfterImpulse (plugin);
 
-    // The impulse comes back where it started, at half level.
-    CHECK (forwardEcho.getSample (0, impulsePosition) == Catch::Approx (0.5f));
+    // The impulse comes back where it started. The parameter is linear, so 50% is half of
+    // the way from no feedback to the engine's maximum.
+    CHECK (forwardEcho.getSample (0, impulsePosition) == Catch::Approx (0.5f * DualBufferReverseEngine::maxFeedbackGain));
 }
 
 TEST_CASE ("PluginProcessor produces no echoes while feedback is at its default", "[PluginProcessor][Feedback]")

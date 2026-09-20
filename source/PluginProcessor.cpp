@@ -122,8 +122,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel ("%")));
 
-    // 100% maps to the engine's maxFeedbackGain (just below unity), which is what keeps
-    // the Feedback Path from running away; see DualBufferReverseEngine::maxFeedbackGain.
+    // 0-100% is scaled linearly onto 0..maxFeedbackGain (just below unity), so the whole
+    // range is live and 100% can never run away; see DualBufferReverseEngine::maxFeedbackGain.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { "feedback", 1 },
         "Feedback",
@@ -225,7 +225,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         dryBuffer.copyFrom (channel, 0, buffer, channel, 0, numSamples);
 
     reverseEngine.setChunkLength (currentChunkLengthInSamples());
-    reverseEngine.setFeedback (feedbackParam->load() / 100.0f);
+    reverseEngine.setFeedback (feedbackParam->load() / 100.0f * DualBufferReverseEngine::maxFeedbackGain);
     reverseEngine.processBlock (buffer);
 
     const auto wetAmount = mixParam->load() / 100.0f;
