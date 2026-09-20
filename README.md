@@ -18,3 +18,7 @@ Formats built: VST3, AU (macOS), and a Standalone app for local testing. AAX is 
 cd Builds
 ctest --verbose --output-on-failure
 ```
+
+## Credits
+
+The editor uses the Press Start 2P typeface by The Press Start 2P Project Authors, under the SIL Open Font License 1.1 ([`licenses/PressStart2P-OFL.txt`](./licenses/PressStart2P-OFL.txt)), taken from the [Google Fonts repository](https://github.com/google/fonts/tree/main/ofl/pressstart2p). The font file lives in `assets/` and is embedded in the plugin binary.
