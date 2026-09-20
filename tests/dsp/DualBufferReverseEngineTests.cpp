@@ -1,6 +1,8 @@
 #include "dsp/DualBufferReverseEngine.h"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
+#include <limits>
 
 TEST_CASE ("DualBufferReverseEngine outputs silence for the first chunk before any history exists", "[DualBufferReverseEngine]")
 {
@@ -298,7 +300,7 @@ TEST_CASE ("DualBufferReverseEngine keeps alternating echo direction while each 
     }
 }
 
-TEST_CASE ("DualBufferReverseEngine takes feedback before the fade, so fades do not compound in the echoes", "[DualBufferReverseEngine][Feedback]")
+TEST_CASE ("DualBufferReverseEngine takes feedback before the Chunk Boundary Crossfade, so the crossfade does not compound in the echoes", "[DualBufferReverseEngine][Feedback]")
 {
     constexpr int chunkLength = 8;
     constexpr int crossfadeLength = 2;
@@ -320,8 +322,9 @@ TEST_CASE ("DualBufferReverseEngine takes feedback before the fade, so fades do 
     secondEcho.clear();
     engine.processBlock (secondEcho);
 
-    // What went back in was 0.5 * 4.0 = 2.0 across the whole chunk, unfaded. The second echo
-    // is then faded once, on its way out: half level on the second sample of the fade-in.
+    // What went back in was 0.5 * 4.0 = 2.0 across the whole chunk, before any crossfade. The
+    // second echo is then shaped by the crossfade once, on its way out: half level on the
+    // second sample of the ramp up.
     CHECK (secondEcho.getSample (0, 0) == 0.0f);
     CHECK (secondEcho.getSample (0, 1) == Catch::Approx (1.0f));
     CHECK (secondEcho.getSample (0, 4) == Catch::Approx (2.0f));
@@ -356,4 +359,65 @@ TEST_CASE ("DualBufferReverseEngine feeds each channel back into itself with no 
         CHECK (forwardEcho.getSample (0, i) == Catch::Approx (expectedLeft[i]));
         CHECK (forwardEcho.getSample (1, i) == Catch::Approx (expectedRight[i]));
     }
+}
+
+TEST_CASE ("DualBufferReverseEngine lets a non-finite input sample play once without circulating in the Feedback Path", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    for (const float badSample : { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+    {
+        for (const float feedbackAmount : { 0.0f, 0.5f })
+        {
+            DualBufferReverseEngine engine;
+            engine.prepare (1, chunkLength, 0);
+            engine.setFeedback (feedbackAmount);
+
+            juce::AudioBuffer<float> badChunk (1, chunkLength);
+            badChunk.clear();
+            badChunk.setSample (0, 0, badSample);
+            engine.processBlock (badChunk);
+
+            // It plays back once, in the second chunk. That is unavoidable and unchanged.
+            juce::AudioBuffer<float> playedOnce (1, chunkLength);
+            playedOnce.clear();
+            engine.processBlock (playedOnce);
+
+            // But it must not have been fed back, so every later chunk is clean.
+            for (int later = 0; later < 3; ++later)
+            {
+                juce::AudioBuffer<float> chunk (1, chunkLength);
+                chunk.clear();
+                engine.processBlock (chunk);
+
+                for (int i = 0; i < chunkLength; ++i)
+                    CHECK (std::isfinite (chunk.getSample (0, i)));
+            }
+        }
+    }
+}
+
+TEST_CASE ("DualBufferReverseEngine treats a negative feedback request as no feedback", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    DualBufferReverseEngine engine;
+    engine.prepare (1, chunkLength, 0);
+    engine.setFeedback (-1.0f);
+
+    juce::AudioBuffer<float> impulseChunk (1, chunkLength);
+    impulseChunk.clear();
+    impulseChunk.setSample (0, 0, 1.0f);
+    engine.processBlock (impulseChunk);
+
+    juce::AudioBuffer<float> reversedEcho (1, chunkLength);
+    reversedEcho.clear();
+    engine.processBlock (reversedEcho);
+
+    juce::AudioBuffer<float> noEcho (1, chunkLength);
+    noEcho.clear();
+    engine.processBlock (noEcho);
+
+    for (int i = 0; i < chunkLength; ++i)
+        CHECK (noEcho.getSample (0, i) == 0.0f);
 }

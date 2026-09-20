@@ -59,7 +59,7 @@ TEST_CASE ("PluginProcessor feeds the reversed output back according to the feed
     CHECK (forwardEcho.getSample (0, impulsePosition) == Catch::Approx (0.5f));
 }
 
-TEST_CASE ("PluginProcessor produces no echoes by default, so sessions saved before Feedback existed sound the same", "[PluginProcessor][Feedback]")
+TEST_CASE ("PluginProcessor produces no echoes while feedback is at its default", "[PluginProcessor][Feedback]")
 {
     PluginProcessor plugin;
     prepare (plugin);

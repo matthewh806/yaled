@@ -29,7 +29,7 @@ private:
     int crossfadeLength = 0;
     int position = 0;
     int pendingChunkLength = -1; // -1 means no pending change
-    float feedback = 0.0f;
+    float feedbackGain = 0.0f;
 
     float gainAt (int pos) const;
 };
