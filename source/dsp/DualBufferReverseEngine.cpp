@@ -1,5 +1,6 @@
 #include "DualBufferReverseEngine.h"
 
+#include <cmath>
 #include <utility>
 
 void DualBufferReverseEngine::prepare (int numChannels, int maxChunkLengthSamples, int crossfadeLengthSamples)
@@ -29,6 +30,11 @@ void DualBufferReverseEngine::setChunkLength (int chunkLengthSamples)
         pendingChunkLength = clamped;
 }
 
+void DualBufferReverseEngine::setFeedback (float amount)
+{
+    feedbackGain = juce::jlimit (0.0f, maxFeedbackGain, amount);
+}
+
 float DualBufferReverseEngine::gainAt (int pos) const
 {
     if (crossfadeLength <= 0)
@@ -55,10 +61,16 @@ void DualBufferReverseEngine::processBlock (juce::AudioBuffer<float>& buffer)
         for (int channel = 0; channel < numChannels; ++channel)
         {
             const auto inputSample = buffer.getSample (channel, n);
-            captureBuffer->setSample (channel, position, inputSample);
+            const auto reversedSample = playBuffer->getSample (channel, chunkLength - 1 - position);
 
-            const auto outputSample = playBuffer->getSample (channel, chunkLength - 1 - position) * gain;
-            buffer.setSample (channel, n, outputSample);
+            // Feedback Path: the reversed sample goes back into the capturing buffer before the
+            // Chunk Boundary Crossfade gain is applied, so the crossfade only shapes what is heard.
+            // A non-finite sample is kept out of the loop: even at zero feedback, inf * 0 is NaN,
+            // and it would otherwise circulate forever instead of playing once and vanishing.
+            const auto fedBack = std::isfinite (reversedSample) ? reversedSample * feedbackGain : 0.0f;
+            captureBuffer->setSample (channel, position, inputSample + fedBack);
+
+            buffer.setSample (channel, n, reversedSample * gain);
         }
 
         ++position;

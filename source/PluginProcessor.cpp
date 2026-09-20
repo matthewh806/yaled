@@ -19,6 +19,7 @@ PluginProcessor::PluginProcessor()
     tempoSyncParam = apvts.getRawParameterValue ("tempoSync");
     tempoSyncDivisionParam = apvts.getRawParameterValue ("tempoSyncDivision");
     mixParam = apvts.getRawParameterValue ("mix");
+    feedbackParam = apvts.getRawParameterValue ("feedback");
 }
 
 PluginProcessor::~PluginProcessor()
@@ -121,6 +122,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout PluginProcessor::createParam
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel ("%")));
 
+    // 0-100% is scaled linearly onto 0..maxFeedbackGain (just below unity), so the whole
+    // range is live and 100% can never run away; see DualBufferReverseEngine::maxFeedbackGain.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { "feedback", 1 },
+        "Feedback",
+        juce::NormalisableRange<float> (0.0f, 100.0f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel ("%")));
+
     return layout;
 }
 
@@ -215,6 +225,7 @@ void PluginProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         dryBuffer.copyFrom (channel, 0, buffer, channel, 0, numSamples);
 
     reverseEngine.setChunkLength (currentChunkLengthInSamples());
+    reverseEngine.setFeedback (feedbackParam->load() / 100.0f * DualBufferReverseEngine::maxFeedbackGain);
     reverseEngine.processBlock (buffer);
 
     const auto wetAmount = mixParam->load() / 100.0f;

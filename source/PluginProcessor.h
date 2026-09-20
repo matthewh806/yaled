@@ -57,6 +57,7 @@ private:
     std::atomic<float>* tempoSyncParam = nullptr;
     std::atomic<float>* tempoSyncDivisionParam = nullptr;
     std::atomic<float>* mixParam = nullptr;
+    std::atomic<float>* feedbackParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PluginProcessor)
 };

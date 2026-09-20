@@ -1,6 +1,8 @@
 #include "dsp/DualBufferReverseEngine.h"
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <cmath>
+#include <limits>
 
 TEST_CASE ("DualBufferReverseEngine outputs silence for the first chunk before any history exists", "[DualBufferReverseEngine]")
 {
@@ -203,4 +205,219 @@ TEST_CASE ("DualBufferReverseEngine clamps setChunkLength to the maximum establi
     const float expected[maxChunkLength] = { 8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f };
     for (int i = 0; i < maxChunkLength; ++i)
         CHECK (secondChunk.getSample (0, i) == Catch::Approx (expected[i]));
+}
+
+TEST_CASE ("DualBufferReverseEngine feeds a Reverse Chunk back so its echo plays forward at the feedback gain", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    DualBufferReverseEngine engine;
+    engine.prepare (1, chunkLength, 0);
+    engine.setFeedback (0.5f);
+
+    // Period 1: an impulse at the start of the first chunk. Nothing to play back yet.
+    juce::AudioBuffer<float> impulseChunk (1, chunkLength);
+    impulseChunk.clear();
+    impulseChunk.setSample (0, 0, 1.0f);
+    engine.processBlock (impulseChunk);
+
+    // Period 2: the impulse plays back reversed, so it lands on the chunk's last sample.
+    juce::AudioBuffer<float> reversedEcho (1, chunkLength);
+    reversedEcho.clear();
+    engine.processBlock (reversedEcho);
+
+    const float expectedReversed[chunkLength] = { 0.0f, 0.0f, 0.0f, 1.0f };
+    for (int i = 0; i < chunkLength; ++i)
+        CHECK (reversedEcho.getSample (0, i) == Catch::Approx (expectedReversed[i]));
+
+    // Period 3: that reversed echo was fed back into the capturing buffer, so reversing
+    // it again puts the impulse back at the start of the chunk, at half the level.
+    juce::AudioBuffer<float> forwardEcho (1, chunkLength);
+    forwardEcho.clear();
+    engine.processBlock (forwardEcho);
+
+    const float expectedForward[chunkLength] = { 0.5f, 0.0f, 0.0f, 0.0f };
+    for (int i = 0; i < chunkLength; ++i)
+        CHECK (forwardEcho.getSample (0, i) == Catch::Approx (expectedForward[i]));
+}
+
+TEST_CASE ("DualBufferReverseEngine clamps feedback to a maximum below unity gain", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    STATIC_REQUIRE (DualBufferReverseEngine::maxFeedbackGain < 1.0f);
+
+    DualBufferReverseEngine engine;
+    engine.prepare (1, chunkLength, 0);
+    engine.setFeedback (5.0f); // far more than the engine allows
+
+    juce::AudioBuffer<float> impulseChunk (1, chunkLength);
+    impulseChunk.clear();
+    impulseChunk.setSample (0, 0, 1.0f);
+    engine.processBlock (impulseChunk);
+
+    juce::AudioBuffer<float> reversedEcho (1, chunkLength);
+    reversedEcho.clear();
+    engine.processBlock (reversedEcho);
+
+    juce::AudioBuffer<float> forwardEcho (1, chunkLength);
+    forwardEcho.clear();
+    engine.processBlock (forwardEcho);
+
+    // The forward echo is the impulse scaled once by the (clamped) feedback gain.
+    CHECK (forwardEcho.getSample (0, 0) == Catch::Approx (DualBufferReverseEngine::maxFeedbackGain));
+}
+
+TEST_CASE ("DualBufferReverseEngine keeps alternating echo direction while each echo decays by the feedback gain", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    DualBufferReverseEngine engine;
+    engine.prepare (1, chunkLength, 0);
+    engine.setFeedback (0.5f);
+
+    juce::AudioBuffer<float> impulseChunk (1, chunkLength);
+    impulseChunk.clear();
+    impulseChunk.setSample (0, 0, 1.0f);
+    engine.processBlock (impulseChunk);
+
+    // Reversed, forward, reversed, forward, each half the level of the one before.
+    const float expected[][chunkLength] = {
+        { 0.0f, 0.0f, 0.0f, 1.0f },
+        { 0.5f, 0.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 0.0f, 0.25f },
+        { 0.125f, 0.0f, 0.0f, 0.0f },
+    };
+
+    for (const auto& expectedChunk : expected)
+    {
+        juce::AudioBuffer<float> chunk (1, chunkLength);
+        chunk.clear();
+        engine.processBlock (chunk);
+
+        for (int i = 0; i < chunkLength; ++i)
+            CHECK (chunk.getSample (0, i) == Catch::Approx (expectedChunk[i]));
+    }
+}
+
+TEST_CASE ("DualBufferReverseEngine takes feedback before the Chunk Boundary Crossfade, so the crossfade does not compound in the echoes", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 8;
+    constexpr int crossfadeLength = 2;
+
+    DualBufferReverseEngine engine;
+    engine.prepare (1, chunkLength, crossfadeLength);
+    engine.setFeedback (0.5f);
+
+    juce::AudioBuffer<float> steadyChunk (1, chunkLength);
+    for (int i = 0; i < chunkLength; ++i)
+        steadyChunk.setSample (0, i, 4.0f);
+    engine.processBlock (steadyChunk);
+
+    juce::AudioBuffer<float> firstEcho (1, chunkLength);
+    firstEcho.clear();
+    engine.processBlock (firstEcho);
+
+    juce::AudioBuffer<float> secondEcho (1, chunkLength);
+    secondEcho.clear();
+    engine.processBlock (secondEcho);
+
+    // What went back in was 0.5 * 4.0 = 2.0 across the whole chunk, before any crossfade. The
+    // second echo is then shaped by the crossfade once, on its way out: half level on the
+    // second sample of the ramp up.
+    CHECK (secondEcho.getSample (0, 0) == 0.0f);
+    CHECK (secondEcho.getSample (0, 1) == Catch::Approx (1.0f));
+    CHECK (secondEcho.getSample (0, 4) == Catch::Approx (2.0f));
+}
+
+TEST_CASE ("DualBufferReverseEngine feeds each channel back into itself with no cross-feed", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    DualBufferReverseEngine engine;
+    engine.prepare (2, chunkLength, 0);
+    engine.setFeedback (0.5f);
+
+    juce::AudioBuffer<float> impulseChunk (2, chunkLength);
+    impulseChunk.clear();
+    impulseChunk.setSample (0, 0, 1.0f); // left impulse at the start
+    impulseChunk.setSample (1, 1, 1.0f); // right impulse one sample later
+    engine.processBlock (impulseChunk);
+
+    juce::AudioBuffer<float> reversedEcho (2, chunkLength);
+    reversedEcho.clear();
+    engine.processBlock (reversedEcho);
+
+    juce::AudioBuffer<float> forwardEcho (2, chunkLength);
+    forwardEcho.clear();
+    engine.processBlock (forwardEcho);
+
+    const float expectedLeft[chunkLength] = { 0.5f, 0.0f, 0.0f, 0.0f };
+    const float expectedRight[chunkLength] = { 0.0f, 0.5f, 0.0f, 0.0f };
+    for (int i = 0; i < chunkLength; ++i)
+    {
+        CHECK (forwardEcho.getSample (0, i) == Catch::Approx (expectedLeft[i]));
+        CHECK (forwardEcho.getSample (1, i) == Catch::Approx (expectedRight[i]));
+    }
+}
+
+TEST_CASE ("DualBufferReverseEngine lets a non-finite input sample play once without circulating in the Feedback Path", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    for (const float badSample : { std::numeric_limits<float>::infinity(), std::numeric_limits<float>::quiet_NaN() })
+    {
+        for (const float feedbackAmount : { 0.0f, 0.5f })
+        {
+            DualBufferReverseEngine engine;
+            engine.prepare (1, chunkLength, 0);
+            engine.setFeedback (feedbackAmount);
+
+            juce::AudioBuffer<float> badChunk (1, chunkLength);
+            badChunk.clear();
+            badChunk.setSample (0, 0, badSample);
+            engine.processBlock (badChunk);
+
+            // It plays back once, in the second chunk. That is unavoidable and unchanged.
+            juce::AudioBuffer<float> playedOnce (1, chunkLength);
+            playedOnce.clear();
+            engine.processBlock (playedOnce);
+
+            // But it must not have been fed back, so every later chunk is clean.
+            for (int later = 0; later < 3; ++later)
+            {
+                juce::AudioBuffer<float> chunk (1, chunkLength);
+                chunk.clear();
+                engine.processBlock (chunk);
+
+                for (int i = 0; i < chunkLength; ++i)
+                    CHECK (std::isfinite (chunk.getSample (0, i)));
+            }
+        }
+    }
+}
+
+TEST_CASE ("DualBufferReverseEngine treats a negative feedback request as no feedback", "[DualBufferReverseEngine][Feedback]")
+{
+    constexpr int chunkLength = 4;
+
+    DualBufferReverseEngine engine;
+    engine.prepare (1, chunkLength, 0);
+    engine.setFeedback (-1.0f);
+
+    juce::AudioBuffer<float> impulseChunk (1, chunkLength);
+    impulseChunk.clear();
+    impulseChunk.setSample (0, 0, 1.0f);
+    engine.processBlock (impulseChunk);
+
+    juce::AudioBuffer<float> reversedEcho (1, chunkLength);
+    reversedEcho.clear();
+    engine.processBlock (reversedEcho);
+
+    juce::AudioBuffer<float> noEcho (1, chunkLength);
+    noEcho.clear();
+    engine.processBlock (noEcho);
+
+    for (int i = 0; i < chunkLength; ++i)
+        CHECK (noEcho.getSample (0, i) == 0.0f);
 }
