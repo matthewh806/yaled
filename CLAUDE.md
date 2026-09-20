@@ -26,3 +26,9 @@ Never commit directly to `main`: a repo ruleset requires a pull request with pas
 - Open a PR with `Closes #N` in the description so the issue closes on merge.
 - Run `/code-review` against `main` before merging and address what it finds. No approving reviews are required (solo project); the review is a quality gate, not a permission gate.
 - Squash-merge, so `main` keeps one commit per ticket.
+
+### Gotchas
+
+- JUCE 8 removed `Font::getStringWidthFloat`. Measure text with `juce::GlyphArrangement` instead.
+- The editor layout sits on the 4 px `retro::pixel` grid, and each control's component ID equals its parameter ID. `tests/PluginEditorTests.cpp` finds controls by those IDs, so keep them in step when adding or renaming a parameter.
+- The Feedback Path cap (0.98) allows very long trails, so the tail length reported to the host (#17) needs a design decision before it is built.
