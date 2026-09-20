@@ -2,7 +2,10 @@ name: Yaled
 
 on:
   workflow_dispatch: # lets you run a build from the UI
+  # Build pushes to main only; feature branches are built via their pull request,
+  # so each branch update runs CI once instead of once per event type.
   push:
+    branches: [main]
   pull_request:
 
 # When pushing new commits, cancel any running builds on that branch
